@@ -10,6 +10,7 @@ import sys
 import regex
 import subprocess
 import tempfile
+import argparse
 from Bio import SeqIO
 
 class primerClipper:
@@ -56,28 +57,33 @@ class primerClipper:
         return records
 
     
-    def _get_ind(self, read, primerset):
+    def _get_ind(self, read, primerset, fuzzy):
         read=str(read)
         for primer in primerset:
             if primer in read:
                 return "exact_hits", read.index(primer)+len(primer)
         else: # no break
-            for primer in primerset:
-                match=regex.findall("(%s){e<=5}" % (primer), read)
-                if any(match):
-                    return "fuzzy_hits", read.index(max(match, key=len))+len(primer)
+            if fuzzy:
+                for primer in primerset:
+                    match=regex.findall("(%s){e<=5}" % (primer), read)
+                    if any(match):
+                        return "fuzzy_hits", read.index(max(match, key=len))+len(primer)
+                else:
+                    return "undetected", None
             else:
                 return "undetected", None
-    
 
-    def _print_summary(self, counter):
+    def _print_summary(self, counter, fuzzy):
         print "seqs total:                         %i" % counter["total"]
         print "seqs with exact primer hit:         %i\t(%s%% total)" % (counter["exact_hits"], round(100*(float(counter["exact_hits"])/float(counter["total"])),2))
-        print "seqs with fuzzy match to primer:    %i\t(%s%% total)" % (counter["fuzzy_hits"], round(100*(float(counter["fuzzy_hits"])/float(counter["total"])),2))
+        if fuzzy:
+            print "seqs with fuzzy match to primer:    %i\t(%s%% total)" % (counter["fuzzy_hits"], round(100*(float(counter["fuzzy_hits"])/float(counter["total"])),2))
+        else:
+            print "seqs with fuzzy match to primer:    N/A" % (counter["fuzzy_hits"], round(100*(float(counter["fuzzy_hits"])/float(counter["total"])),2))
         print "seqs with undetected primer:        %i\t(%s%% total)" % (counter["undetected"], round(100*(float(counter["undetected"])/float(counter["total"])),2))
 
 
-    def main(self, path_to_reads, primer, path_to_output):
+    def main(self, path_to_reads, primer, path_to_output, fuzzy):
         records=self._get_seqs(path_to_reads)
         primer_seq=self._translateDegenerate(primer)
         
@@ -90,7 +96,7 @@ class primerClipper:
         
         with open(path_to_output, 'w') as out:
             for record in records:
-                cat,ind=self._get_ind(record.seq, primer_seq)
+                cat,ind=self._get_ind(record.seq, primer_seq, fuzzy)
                 counter[cat]+=1
                 if ind:
                     record=record[ind:]
@@ -98,4 +104,11 @@ class primerClipper:
         
         self._print_summary(counter)
         
-primerClipper().main(sys.argv[1], sys.argv[2], sys.argv[3])
+parser = argparse.ArgumentParser(description='''clip N shift primers''')
+parser.add_argument('--input', type=str, help='input sequences', required=True)
+parser.add_argument('--output', type=str, help='output sequences', required=True)
+parser.add_argument('--primer', type=str, help='primer sequence', required=True)
+parser.add_argument('--accept_fuzzy', help='Accept fuzzy hits', action="store_true", default=False)
+args = parser.parse_args()
+
+primerClipper().main(args.input, args.primer, args.output, args.accept_fuzzy)
