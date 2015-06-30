@@ -5,7 +5,7 @@
 ## clip_Nshift_primer.py <IN> <PRIMER> <OUT>
 # Created by Joel Boyd, 23/06/2015
 # Australian Centre for ecogenomics
-
+import difflib
 import sys
 import regex
 import subprocess
@@ -53,25 +53,53 @@ class primerClipper:
             cmd=['zcat', path, '>', fastq.name]
             subprocess.check_call(' '.join(cmd), shell=True)
             fastq.flush()
-            records=list(SeqIO.parse(open(fastq.name, 'r'), 'fastq'))
+            records=SeqIO.to_dict(SeqIO.parse(open(fastq.name, 'r'), 'fastq'))
         return records
 
     
-    def _get_ind(self, read, primerset, fuzzy):
-        read=str(read)
-        for primer in primerset:
-            if primer in read:
-                return "exact_hits", read.index(primer)+len(primer)
-        else: # no break
-            if fuzzy:
-                for primer in primerset:
-                    match=regex.findall("(%s){e<=5}" % (primer), read)
-                    if any(match):
-                        return "fuzzy_hits", read.index(max(match, key=len))+len(primer)
+    def _get_ind(self, records, primerset, fuzzy):
+        n_no_ht = 0
+        n_ht    = 0
+        fz_ht   = 0
+        no_ht   = []
+        ht      = []
+        for key, record in records.iteritems():
+            read=str(record.seq)
+            h=False
+            for primer in primerset:
+                if primer in read:
+                    ht.append(record[read.index(primer)+len(primer):])
+                    n_ht+=1
+                    h=True
                 else:
-                    return "undetected", None
-            else:
-                return "undetected", None
+                    continue
+            if h == False:
+                no_ht.append(record)
+        if fuzzy:
+            for primer in primerset:
+                a={record.name: regex.findall("(%s){e<=5}" % (primer), str(record.seq)) for record in no_ht}
+                a={key:item for key, item in a.iteritems() if item}
+                
+                for key,item in a.iteritems():
+                    if len(item)>1:    
+                        best_match=[difflib.SequenceMatcher(None, x, primer).ratio() for x in item]
+                        best=item[ best_match.index(max(best_match)) ] 
+                        ind = str(records[key].seq).index(best) + len(best)
+                    else:
+                        best=item[0]
+                        ind = str(records[key].seq).index(best) + len(best)
+                        
+                    record=records[key]
+                    no_ht.remove(record)
+                    ht.append(record[ind:])
+                    fz_ht+=1
+            
+            n_no_ht=len(no_ht)
+            return ht, n_ht, fz_ht, n_no_ht
+           
+        else:
+            n_no_ht=len(no_ht)
+            return ht, n_ht, fz_ht, n_no_ht
 
     def _print_summary(self, counter, fuzzy):
         print "seqs total:                         %i" % counter["total"]
@@ -79,7 +107,7 @@ class primerClipper:
         if fuzzy:
             print "seqs with fuzzy match to primer:    %i\t(%s%% total)" % (counter["fuzzy_hits"], round(100*(float(counter["fuzzy_hits"])/float(counter["total"])),2))
         else:
-            print "seqs with fuzzy match to primer:    N/A" % (counter["fuzzy_hits"], round(100*(float(counter["fuzzy_hits"])/float(counter["total"])),2))
+            print "seqs with fuzzy match to primer:    N/A" 
         print "seqs with undetected primer:        %i\t(%s%% total)" % (counter["undetected"], round(100*(float(counter["undetected"])/float(counter["total"])),2))
 
 
@@ -88,21 +116,22 @@ class primerClipper:
         primer_seq=self._translateDegenerate(primer)
         
         counter={
-                 "total":len(records),
-                 "exact_hits":0,
-                 "fuzzy_hits":0,
-                 "undetected":0
+                 "total"      :len(records),
+                 "exact_hits" :0,
+                 "fuzzy_hits" :0,
+                 "undetected" :0
                  }
         
         with open(path_to_output, 'w') as out:
-            for record in records:
-                cat,ind=self._get_ind(record.seq, primer_seq, fuzzy)
-                counter[cat]+=1
-                if ind:
-                    record=record[ind:]
-                    SeqIO.write(record, out, "fastq")
+            
+            hits, numhits, fuzzynum, miss =self._get_ind(records, primer_seq, fuzzy)
+            counter["exact_hits"]=numhits
+            counter["fuzzy_hits"]=fuzzynum
+            counter["undetected"]=miss
+            
+            SeqIO.write(hits, out, "fastq")
         
-        self._print_summary(counter)
+        self._print_summary(counter, fuzzy)
         
 parser = argparse.ArgumentParser(description='''clip N shift primers''')
 parser.add_argument('--input', type=str, help='input sequences', required=True)
