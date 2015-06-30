@@ -8,7 +8,7 @@ args = parser.parse_args()
 
 ids=[x.rstrip() for x in open(args.accessions, 'r')]
 set_ids = set(ids)
-
+seen=[]
 for i in [x.rstrip() for x in open(args.gg_taxonomy, 'r')]:
   splt=i.split()
   if args.mode == 'n':
@@ -16,7 +16,7 @@ for i in [x.rstrip() for x in open(args.gg_taxonomy, 'r')]:
       print i
   if args.mode == 'p':
     if splt[0] in set_ids:
+      seen+=splt[0]
       print i
-
 
 exit(1)
