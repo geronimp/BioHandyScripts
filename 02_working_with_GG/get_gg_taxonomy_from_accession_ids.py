@@ -13,9 +13,16 @@ for i in [x.rstrip() for x in open(args.gg_taxonomy, 'r')]:
   tax_dict[splt[0]]=' '.join(splt[1:]).strip()
 
 
+
 if args.v:
-  print "not right now"
+  for i in [x.strip() for x in open(args.accessions)]:
+    if i in tax_dict:
+      del tax_dict[i]
+  for key, item in tax_dict.iteritems():
+    print "%s\t%s" % (key, item)
+
 else:
+
   for i in [x.strip() for x in open(args.accessions)]:
     if i in tax_dict:
       print "%s\t%s" % (i, tax_dict[i])
