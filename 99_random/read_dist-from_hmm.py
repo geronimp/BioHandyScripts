@@ -1,9 +1,17 @@
 import os
 import sys
 
-hmm_output_lines = [x.strip().split() for x in open(sys.argv[1]) \
-                    if x[0] != "#"]
+hmm_output_files = [[x.strip().split() for x in open(y) if x[0] != "#"] for y in sys.argv[1].split(',')]
+seen={}
 
+for hmm_output_lines in hmm_output_files:
+  for entry in hmm_output_lines:
+    if entry[0] in seen:
+      if float(seen[entry[0]][13]) < float(entry[13]):
+        seen[entry[0]] = entry
+    else:
+      seen[entry[0]] = entry
+hmm_output_lines = seen.values()
 hmm_length = int(hmm_output_lines[0][5])
 bit_profile = [[] for x in range(0, hmm_length)]
 
