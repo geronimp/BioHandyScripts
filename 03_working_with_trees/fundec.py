@@ -172,13 +172,11 @@ have consistent taxonomy in order to be clustered (default = 0.9)',
     args = check_args(parser.parse_args())
         
     fd = FunDec(args.base)
-    status = fd.main(args.tree,
-                     args.database,
-                     args.cutoff,
-                     args.output)
+    
+    fd.main(args.tree,
+            args.database,
+            args.cutoff,
+            args.output)
 
-    if status == 0:
-        exit(0)
-    else:
-        exit(1)
+    exit(0)
     
