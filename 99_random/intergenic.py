@@ -32,6 +32,7 @@ import argparse
 import logging
 import subprocess
 import os
+import pickle
 
 ###############################################################################
 
@@ -49,6 +50,8 @@ class Intergenic:
 	TAB 	= '\t'
 	NEWLINE	= '\n'
 	CDS 	= 'CDS'
+	PICKLE_SUFFIX = '.parsed_gff.pickle'
+	OUTPUT_SUFFIX = '.results.tsv'
 	
 	def _parse_gffs(self, gffs):
 		'''
@@ -116,11 +119,6 @@ class Intergenic:
 				end    			= start + len(line.split(self.TAB)[9])
 				mapped_region 	= range(start, end)
 				contig 			= line.split(self.TAB)[2]
-				
-				try:
-					contig_regions[contig]
-				except:
-					import IPython ; IPython.embed()
 
 				if len(contig_regions[contig].intersection(mapped_region))==0:
 					contig_counts[contig][0] += 1 # Intergenic
@@ -128,7 +126,7 @@ class Intergenic:
 					contig_counts[contig][1] += 1 # Genic
 			
 			for contig, counts in contig_counts.items():
-				output_lines.append([bam_name, contig, str(counts[0]), str(counts[1])])
+				output_lines.append([bam_name, contig, string(len(contig_regions[contig])), str(counts[0]), str(counts[1])])
 
 		return output_lines
 
@@ -141,7 +139,7 @@ class Intergenic:
 		output_file_path - String. Write results to this file.
 		'''
 
-		header = ['bam', 'contig', 'intergenic', 'genic']
+		header = ['bam', 'contig', 'coding_bases' 'intergenic', 'genic']
 		
 		with open(output_file_path, 'w') as out_io:
 			out_io.write(header + self.NEWLINE)
@@ -149,16 +147,27 @@ class Intergenic:
 			for line in output_lines:
 				out_io.write('\t'.join(line) + self.NEWLINE)
 
-	def do(self, gffs, bams, output):
+	def do(self, gffs, preparsed_gffs, bams, output):
 
-		logging.info('Parsing GFFs')
-		genic_regions = self._parse_gffs(gffs)
-		
+		output_file   = output+self.OUTPUT_SUFFIX
+		output_pickle = output+self.PICKLE_SUFFIX
+
+		if preparsed_gffs:
+			genic_regions = {}
+			logging.info('Loading pre-parsed GFF pickle')
+			for preparsed_gff in preparsed_gffs:
+				genic_regions.update(pickle.load(open(preparsed_gff)))
+		else:
+			logging.info('Parsing GFFs')
+			genic_regions = self._parse_gffs(gffs)
+			logging.info('Pickling genic regions for later use: %s' % (output_pickle))
+			pickle.dump(genic_regions, open(output_pickle,'w'))	
+		exit()
 		logging.info('Filtering BAMs')
 		filtered_reads = self._filter_bam(genic_regions, bams)
 		
-		logging.info('Writing results to output: %s' % (output))
-		self._write(filtered_reads, output)
+		logging.info('Writing results to output: %s' % (output_file))
+		self._write(filtered_reads, output_file)
 
 		logging.info('Done')
 
@@ -170,20 +179,22 @@ if __name__ == '__main__':
 	
 	parser.add_argument('--gff', type=str, help='space separated list of gff files', nargs='+', required=True)
 	parser.add_argument('--bam', type=str, help='bam file', nargs = '+', required=True)
-	parser.add_argument('--output', type=str, help='output file', required=True)
+	parser.add_argument('--output_prefix', type=str, help='output suffix', required=True)
+	parser.add_argument('--parsed_gff', type=str, help='preparsed gff files', default=None)
 	parser.add_argument('--log', help='Output logging information to file', type=str, default=False)
 	parser.add_argument('--verbosity', help='1 - 5, 1 being silent, 5 being noisy indeed. Default = 4', type=int, default=4)
 	
 	args = parser.parse_args()
 	
 	if args.log:
-		if os.path.isfile(args.log): 
+		if os.path.isfile(args.log): 	
 			raise Exception("File %s exists" % args.log)
 		logging.basicConfig(filename=args.log, level=debug[args.verbosity], format='%(asctime)s %(levelname)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 	else:
 		logging.basicConfig(level=debug[args.verbosity], format='%(asctime)s %(levelname)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 	
 	i = Intergenic()
-	i.do(args.gff, args.bam, args.output)
+
+	i.do(args.gff, args.parsed_gff, args.bam, args.output_prefix)
 
 	exit(0)
