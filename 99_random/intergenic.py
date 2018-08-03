@@ -162,7 +162,7 @@ class Intergenic:
 			genic_regions = self._parse_gffs(gffs)
 			logging.info('Pickling genic regions for later use: %s' % (output_pickle))
 			pickle.dump(genic_regions, open(output_pickle,'w'))	
-		exit()
+	
 		logging.info('Filtering BAMs')
 		filtered_reads = self._filter_bam(genic_regions, bams)
 		
